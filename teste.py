@@ -78,19 +78,21 @@ with mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence
         saida_facemesh = facemesh.process(frame)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-
         if saida_facemesh.multi_face_landmarks:
             print("Rosto detectado")
             tempo_atual = time.time()
-            if tempo_atual - ultimo_tempo_audio >= 10 and som_tocando == False:
+            # Toca o som de pássaro apenas uma vez ao detectar o rosto
+            if not som_tocando:
                 audio_aleatorio = random.choice(audios_rosto)
                 try:
                     pygame.mixer.music.load(audio_aleatorio)
                     pygame.mixer.music.play()
                     ultimo_tempo_audio = tempo_atual
                     nome_audio = audios_rosto_nomes.get(audio_aleatorio, "desconhecido")
+                    som_tocando = True
                 except pygame.error as e:
                     print(f"Erro ao carregar o áudio {audio_aleatorio}: {e}")
+        
         else:
             print("Nenhum rosto detectado")
             pygame.mixer.music.stop()
@@ -108,16 +110,7 @@ with mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence
                 
                 face = face_landmarks.landmark
                 
-                for id_coord, coord_xyz in enumerate(face):
-                    if id_coord in pts_olhos:
-                        coord_cv = mp_drawing._normalized_to_pixel_coordinates(coord_xyz.x, coord_xyz.y, largura, comprimento)
-                        cv2.circle(frame, coord_cv, 2, (255, 0, 0), -1)
-                    if id_coord in pts_boca:
-                        coord_cv = mp_drawing._normalized_to_pixel_coordinates(coord_xyz.x, coord_xyz.y, largura, comprimento)
-                        cv2.circle(frame, coord_cv, 2, (255, 0, 0), -1)
-
                 ear = calculo_ear(face, pts_olho_dir, pts_olho_esq)
-                cv2.rectangle(frame, (0, 1), (320, 150), (58, 58, 55), -1)
                 cv2.putText(frame, f"EAR: {round(ear, 2)}", (1, 24),
                             cv2.FONT_HERSHEY_TRIPLEX,
                             0.9, (255, 255, 255), 2)
@@ -130,13 +123,11 @@ with mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence
                 cv2.putText(frame, f"MAR: {round(mar, 2)}", (1, 50),
                             cv2.FONT_HERSHEY_TRIPLEX,
                             0.9, (255, 255, 255), 2)
-                cv2.putText(frame, f"MAR: {round(mar, 2)}", (1, 50),
+                
+                cv2.putText(frame,f"{ 'Boca aberta' if mar >= mar_limiar else  'Boca fechada '}", (1, 80),
                             cv2.FONT_HERSHEY_TRIPLEX,
                             0.9, (255, 255, 255), 2)
-                cv2.putText(frame,f"{ 'Boca aberta' if mar >= mar_limiar else  'Boca fechada '}", (1, 140),
-                            cv2.FONT_HERSHEY_TRIPLEX,
-                            0.9, (255, 255, 255), 2)
-
+                
                 if ear < ear_limiar:
                     t_inicial = time.time() if dormindo == 0 else t_inicial
                     dormindo = 1
@@ -144,16 +135,8 @@ with mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence
                     dormindo = 0
                 t_final = time.time()
                 
-                if mar < mar_limiar:
-                    try:
-                        pygame.mixer.music.load(audio_boca)
-                        pygame.mixer.music.play()
-                        ultimo_tempo_audio_boca = tempo_atual
-                    except pygame.error as e:
-                        print(f"Erro ao carregar o áudio {audio_aleatorio}: {e}")
-
                 tempo = (t_final - t_inicial) if dormindo == 1 else 0.0
-                cv2.putText(frame, f"Tempo: {round(tempo, 3)}", (1, 80),
+                cv2.putText(frame, f"Tempo: {round(tempo, 3)}", (1, 140),
                             cv2.FONT_HERSHEY_TRIPLEX,
                             0.9, (255, 255, 255), 2)
                 if tempo >= 1.5:
@@ -161,7 +144,22 @@ with mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence
                     cv2.putText(frame, f"Muito tempo com olhos fechados!", (80, 435),
                                 cv2.FONT_HERSHEY_TRIPLEX,
                                 0.85, (58, 58, 55), 1)
-
+                
+                if mar >= mar_limiar:
+                    # Toca o som de boca continuamente enquanto a boca estiver aberta
+                    if not som_tocando_boca:
+                        try:
+                            pygame.mixer.music.load(audio_boca)
+                            pygame.mixer.music.play(-1)  # Reproduz continuamente
+                            som_tocando_boca = True
+                        except pygame.error as e:
+                            print(f"Erro ao carregar o áudio {audio_boca}: {e}")
+                else:
+                    # Para o som de boca quando a boca é fechada
+                    if som_tocando_boca:
+                        pygame.mixer.music.stop()
+                        som_tocando_boca = False
+                
         except Exception as e:
             print("Erro:", e)
 
@@ -173,4 +171,4 @@ with mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence
             break
 
 camera.release()
-cv2.destroyAllWindows() 
+cv2.destroyAllWindows()
